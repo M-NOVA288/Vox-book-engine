@@ -30,7 +30,18 @@ A highly scalable, full-stack web application engineered in **TypeScript** and *
 ---
 
 ## 🏗️ Repository Mapping
-
+├── .tsx Components       # Modular presentation and infrastructure logic layer
+│   ├── AccessDenied      # Intercepts restricted asset routes and displays conversion CTAs
+│   ├── ChapterList       # Orchestrates manuscript breakdowns and track hierarchies
+│   ├── ConversionProgress# Handles stateful polling interfaces for backend rendering pipelines
+│   ├── CreatorDashboard  # Central telemetry and data hub for account management
+│   ├── PayoutSettings    # Financial configuration panel for payout routing
+│   ├── Player            # Custom long-form audio media player engine
+│   ├── PremiumModal      # Commercial conversion asset handling payment triggers
+│   └── SubscriptionBanner# Persistent subscription lifecycle alerts and upgrade reminders
+├── file.css              # Main component stylesheets and layout frameworks
+├── file.json             # Core dependency management, metadata, and engine rulesets
+└── file.sh               # Shell utility scripting to execute continuous automated deployment
 
 ## 🏁 Getting Started & Local Setup
 
