@@ -1,53 +1,51 @@
-# 🎥 CreatorStream: Full-Stack Video Monetization & Streaming SaaS
+# 🎧 VoxBook: Full-Stack AI Audiobook Generation & Monetization SaaS
 
-A modern, full-stack video streaming and subscription management application built with **TypeScript** and **React**. This platform empowers independent content creators to upload video courses or exclusive content, gate media behind premium subscription tiers, track viewer progression, and manage payouts via an intuitive creator dashboard.
-
----
-
-## 🚀 Core Features
-
-### 📺 Video Player & Progression Engineering (`/Player.tsx`, `/ChapterList.tsx`)
-*   **Structured Content Delivery:** Supports multi-chapter video playlists with interactive sidebar navigation.
-*   **Stateful Progress Tracking (`/ConversionProgress.tsx`):** Real-time monitoring of viewer playback metrics to resume streaming seamlessly across sessions.
-
-### 💰 Monetization & Access Control Engine (`/PremiumModal.tsx`, `/SubscriptionBanner.tsx`)
-*   **Granular Paywalls:** Middleware components that dynamically evaluate user authentication states and subscription access strings.
-*   **Security Access Layer (`/AccessDenied.tsx`):** Graceful fallbacks and explicit call-to-actions (CTAs) prompted when non-premium users attempt to breach gated CDN resources.
-
-### 📊 Financial Operations Hub (`/CreatorDashboard.tsx`, `/PayoutSettings.tsx`)
-*   **Creator Analytics:** A unified visualization portal mapping lifetime revenue, monthly active subscribers, and video view velocities.
-*   **Payout Architecture:** Secure routing profiles enabling creators to manage balance minimums, deposit methods, and historical accounting data.
+A highly scalable, full-stack web application engineered in **TypeScript** and **React** designed to transform raw manuscript text into structured, production-grade audiobooks. The platform features programmatic audio chunking, automated generation tracking, dynamic paywalling, and a dedicated creator workspace for asset monetization.
 
 ---
 
-## 🛠️ Technical Stack & Architecture
+## 🚀 Core Platform Architecture
 
-*   **Frontend Interface:** React.js written in **TypeScript (99.1%)** for rigorous compile-time type-safety and interface validation.
-*   **Styling Architecture:** High-performance, modular UI presentation handled via cascading style rules (`/file.css`).
-*   **Infrastructure Automation (`/file.sh`):** Custom shell deployment scripting to automatically handle asset optimization, cloud environments, and headless builds.
+### 🎙️ Audio Generation & Pipeline Engineering
+*   **Sequential Track Generation (`/ChapterList.tsx`):** Breaks down monolithic text manuscripts into programmatically managed chapters, managing the individual generation requests for each asset node.
+*   **Real-Time Generation Pipeline (`/ConversionProgress.tsx`):** A stateful monitoring dashboard displaying processing velocities, queuing latency, and rendering status bars as backend AI engines process audio formats.
+*   **Media Delivery Engine (`/Player.tsx`):** A customized, state-retaining stream media player optimized for long-form audio consumption, supporting chapter hopping and playback speed settings.
+
+### 💳 Monetization & Access Architecture
+*   **Granular Premium Tiering (`/PremiumModal.tsx`, `/SubscriptionBanner.tsx`):** Active structural gates preventing unauthorized generation requests. Restricts access to premium, ultra-realistic voice models or advanced audio mastering features behind subscription paywalls.
+*   **Security Access Control Layer (`/AccessDenied.tsx`):** UI middleware that gracefully catches unauthorized resource calls (e.g., trying to generate text past account credit allowances) and routes users seamlessly into conversion funnels.
+
+### 📈 Operations & Creator Business Dashboard
+*   **Creator Workspace Dashboard (`/CreatorDashboard.tsx`):** A comprehensive operational interface for authors and publishers to track book generation histories, active asset inventory, and distribution analytics.
+*   **Payout Infrastructure Management (`/PayoutSettings.tsx`):** Secure accounting portal allowing creators to link payout destinations, verify financial compliance, and audit platform royalty/accrual distribution.
 
 ---
 
-## 🏗️ Repository Layout & Structure
+## 🛠️ Technical Stack & Dependencies
 
-engine
+*   **Frontend Ecosystem:** Engineered entirely in **TypeScript (99.1%)**, ensuring rigid static type safety, reliable payload interfaces, and programmatic contract compliance across all components.
+*   **Interface Styling (`/file.css`):** Built using an optimized custom stylesheet layout grid, maintaining full-viewport responsive scaling across both mobile web browsers and desktop platforms.
+*   **DevOps & Automation Pipeline (`/file.sh`):** Features native UNIX shell deployment routines to programmatically execute headless application testing, run production build configurations, and optimize file asset packages for hosting.
 
 ---
 
-## 🏁 Getting Started & Local Deployment
+## 🏗️ Repository Mapping
 
-1. **Clone the repository:**
+
+## 🏁 Getting Started & Local Setup
+
+1. **Clone the project repository:**
    ```bash
    git clone https://github.com
-   cd creator-stream-saas
+   cd ai-audiobook-generator
    ```
 
-2. **Install internal packages and dependencies:**
+2. **Install production package dependencies:**
    ```bash
    npm install
    ```
 
-3. **Initialize local development server:**
+3. **Initialize the local staging development server:**
    ```bash
    npm run dev
    ```
