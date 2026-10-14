@@ -12,8 +12,11 @@ import { CreatorDashboard } from "./components/CreatorDashboard";
 import { PayoutSettings } from "./components/PayoutSettings";
 import { AccessDenied } from "./components/AccessDenied";
 import { UserMenu } from "./components/UserMenu";
+import { ReliabilityLab } from "./components/ReliabilityLab";
+import { queue } from "./pipeline/runtime";
+import { splitIntoChapters } from "./pipeline/chapters";
 import { Book, UserSubscription, CreatorEarnings, User, UserRole } from "./types";
-import { Headphones, Crown, Clock, DollarSign, LayoutDashboard, Lock, Globe } from "lucide-react";
+import { Headphones, Crown, Clock, DollarSign, LayoutDashboard, Lock, Globe, Activity } from "lucide-react";
 
 export default function App() {
   // Current user - In production, this would come from authentication
@@ -123,7 +126,7 @@ export default function App() {
   const [showPricing, setShowPricing] = useState(false);
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [premiumFeature, setPremiumFeature] = useState<string>("");
-  const [activeView, setActiveView] = useState<"player" | "dashboard" | "payouts">("player");
+  const [activeView, setActiveView] = useState<"player" | "dashboard" | "payouts" | "reliability">("player");
 
   // Check if user can access payouts
   const canAccessPayouts = currentUser.role === "admin" || currentUser.role === "publisher";
@@ -190,41 +193,57 @@ export default function App() {
     setConversionProgress(0);
     setShowUploader(false);
 
-    const interval = setInterval(() => {
-      setConversionProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsConverting(false);
+    void generateAudiobook(files[0]);
+  };
 
-          const newBook: Book = {
-            id: Date.now().toString(),
-            title: files[0].name.replace(/\.[^/.]+$/, ""),
-            author: "Unknown Author",
-            duration: Math.floor(Math.random() * 20000) + 10000,
-            progress: 0,
-            cover: "bg-rose-600",
-            status: "new",
-            chapters: [
-              { id: `${Date.now()}-1`, title: "Chapter 1", startTime: 0, duration: 3600 },
-              { id: `${Date.now()}-2`, title: "Chapter 2", startTime: 3600, duration: 4200 },
-              { id: `${Date.now()}-3`, title: "Chapter 3", startTime: 7800, duration: 3900 },
-            ],
-            bookmarks: [],
-          };
-          setBooks((prev) => [newBook, ...prev]);
+  /**
+   * Runs a manuscript through the generation pipeline: split into chapters, enqueue one job per
+   * chapter (idempotent ids), and track progress as jobs finish. Retries, timeouts, the circuit
+   * breaker and dead-lettering all happen inside the queue (see src/pipeline).
+   */
+  const generateAudiobook = async (file: File) => {
+    const bookId = `${Date.now()}`;
+    const raw = file.type.startsWith("text/") || /\.(txt|md)$/i.test(file.name) ? await file.text() : "";
+    // Only plain text can be read in the browser; other formats use placeholder chapters.
+    const chapters = splitIntoChapters(raw).length
+      ? splitIntoChapters(raw)
+      : [1, 2, 3].map((n, i) => ({ index: i, title: `Chapter ${n}`, text: `Placeholder text for chapter ${n} of ${file.name}.` }));
 
-          if (!subscription.isPremium) {
-            setSubscription((prev) => ({
-              ...prev,
-              conversionsRemaining: prev.conversionsRemaining - 1,
-            }));
-          }
+    const ids = chapters.map((c) => queue.enqueue(`${bookId}:${c.index}`, { bookId, index: c.index, title: c.title, text: c.text }).id);
+    const done = () => ids.map((id) => queue.get(id)!).filter((j) => j.status === "succeeded" || j.status === "dead").length;
 
-          return 100;
-        }
-        return prev + Math.random() * 12;
-      });
-    }, 400);
+    const tick = setInterval(() => setConversionProgress(Math.round((done() / ids.length) * 100)), 250);
+    await queue.drain();
+    clearInterval(tick);
+    setConversionProgress(100);
+
+    const jobs = ids.map((id) => queue.get(id)!);
+    const failed = jobs.filter((j) => j.status === "dead");
+    let start = 0;
+    const newBook: Book = {
+      id: bookId,
+      title: file.name.replace(/\.[^/.]+$/, ""),
+      author: "Unknown Author",
+      duration: jobs.reduce((sum, j) => sum + (j.result?.audioSeconds ?? 0), 0),
+      progress: 0,
+      cover: "bg-rose-600",
+      status: "new",
+      chapters: jobs.filter((j) => j.status === "succeeded").map((j) => {
+        const ch = { id: j.id, title: j.input.title, startTime: start, duration: j.result!.audioSeconds };
+        start += ch.duration;
+        return ch;
+      }),
+      bookmarks: [],
+    };
+
+    setIsConverting(false);
+    if (newBook.chapters.length) setBooks((prev) => [newBook, ...prev]);
+    if (failed.length) {
+      alert(`${failed.length} of ${jobs.length} chapters failed after retries and were moved to the dead-letter list. Open the Reliability Lab to retry them.`);
+    }
+    if (!subscription.isPremium) {
+      setSubscription((prev) => ({ ...prev, conversionsRemaining: prev.conversionsRemaining - 1 }));
+    }
   };
 
   const handleSelectBook = (book: Book) => {
@@ -409,6 +428,15 @@ export default function App() {
                   Payouts
                   {!canAccessPayouts && <Lock className="w-3 h-3" />}
                 </button>
+                <button
+                  onClick={() => setActiveView("reliability")}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-1.5 ${
+                    activeView === "reliability" ? "bg-slate-700 text-white" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Activity className="w-4 h-4" />
+                  Reliability
+                </button>
               </div>
 
               {sleepTimerRemaining && (
@@ -548,6 +576,8 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {activeView === "reliability" && <ReliabilityLab />}
 
         {activeView === "dashboard" && (
           canAccessDashboard ? (

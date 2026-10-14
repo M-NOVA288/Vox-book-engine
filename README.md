@@ -1,62 +1,87 @@
-# 🎧 VoxBook: Full-Stack AI Audiobook Generation & Monetization SaaS
+# VoxBook: Resilient Audiobook Generation Pipeline
 
-A highly scalable, full-stack web application engineered in **TypeScript** and **React** designed to transform raw manuscript text into structured, production-grade audiobooks. The platform features programmatic audio chunking, automated generation tracking, dynamic paywalling, and a dedicated creator workspace for asset monetization.
+[![CI](https://github.com/M-NOVA288/Vox-book-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/M-NOVA288/Vox-book-engine/actions/workflows/ci.yml)
 
----
+A React + TypeScript app that turns a manuscript into audiobook chapters. The focus is the
+**generation pipeline**: what happens when the text-to-speech provider is slow, rate-limits you,
+returns errors or goes down entirely.
 
-## 🚀 Core Platform Architecture
+> **Scope:** the UI (library, player, creator dashboard, paywall) is a front-end prototype with mock
+> account and payout data. The speech provider is **simulated** (`FakeSpeechProvider`) so failures can be
+> injected on demand. The pipeline itself (queue, retries, timeouts, circuit breaker, dead-letter list)
+> is real code with tests.
 
-### 🎙️ Audio Generation & Pipeline Engineering
-*   **Sequential Track Generation (`/ChapterList.tsx`):** Breaks down monolithic text manuscripts into programmatically managed chapters, managing the individual generation requests for each asset node.
-*   **Real-Time Generation Pipeline (`/ConversionProgress.tsx`):** A stateful monitoring dashboard displaying processing velocities, queuing latency, and rendering status bars as backend AI engines process audio formats.
-*   **Media Delivery Engine (`/Player.tsx`):** A customized, state-retaining stream media player optimized for long-form audio consumption, supporting chapter hopping and playback speed settings.
+## The problem
 
-### 💳 Monetization & Access Architecture
-*   **Granular Premium Tiering (`/PremiumModal.tsx`, `/SubscriptionBanner.tsx`):** Active structural gates preventing unauthorized generation requests. Restricts access to premium, ultra-realistic voice models or advanced audio mastering features behind subscription paywalls.
-*   **Security Access Control Layer (`/AccessDenied.tsx`):** UI middleware that gracefully catches unauthorized resource calls (e.g., trying to generate text past account credit allowances) and routes users seamlessly into conversion funnels.
+A 30-chapter book means 30 calls to a speech API. Real providers return random 5xx errors, throttle
+with 429 + `Retry-After`, occasionally hang, and sometimes go down for minutes. A naive loop either
+fails the whole book on the first error or retries in a tight loop and makes the outage worse.
 
-### 📈 Operations & Creator Business Dashboard
-*   **Creator Workspace Dashboard (`/CreatorDashboard.tsx`):** A comprehensive operational interface for authors and publishers to track book generation histories, active asset inventory, and distribution analytics.
-*   **Payout Infrastructure Management (`/PayoutSettings.tsx`):** Secure accounting portal allowing creators to link payout destinations, verify financial compliance, and audit platform royalty/accrual distribution.
+## How the pipeline handles it
 
----
+```
+manuscript ─► splitIntoChapters ─► JobQueue (concurrency 3) ─► withTimeout(5s) ─► speech provider
+                                     │  idempotent job ids          │
+                                     │                              ├─ success  → breaker.onSuccess, record latency
+                                     │                              └─ failure  → breaker.onFailure
+                                     │                                   ├─ 4xx (permanent)       → dead-letter
+                                     │                                   ├─ retryable, attempts left → jittered backoff
+                                     │                                   │                          (≥ Retry-After on 429)
+                                     │                                   └─ out of attempts        → dead-letter
+                                     └─ circuit open → job waits for cooldown without spending an attempt
+```
 
-## 🛠️ Technical Stack & Dependencies
+| Concern | Technique | Code |
+|---|---|---|
+| Transient failures | Retry with exponential backoff and **full jitter** (avoids a synchronized retry storm when the provider recovers) | [`retry.ts`](src/pipeline/retry.ts) |
+| Hung calls | Per-attempt deadline; a stuck call frees its worker after 5 s | [`errors.ts`](src/pipeline/errors.ts) |
+| Retry only what can succeed | 429, 5xx and timeouts retry; 4xx goes straight to dead-letter | [`errors.ts`](src/pipeline/errors.ts) |
+| Rate limits | Honors `Retry-After` from 429 responses | [`queue.ts`](src/pipeline/queue.ts) |
+| Outages | **Circuit breaker** (closed → open → half-open): stops calling a dead provider, sends one trial call after cooldown; queued jobs pause instead of burning their retries | [`circuitBreaker.ts`](src/pipeline/circuitBreaker.ts) |
+| Overload | Bounded concurrency (3 calls in flight) | [`queue.ts`](src/pipeline/queue.ts) |
+| Duplicate work | Idempotent job ids (`bookId:chapterIndex`): enqueueing twice never calls the provider twice | [`queue.ts`](src/pipeline/queue.ts) |
+| Poison jobs | **Dead-letter list** with manual requeue after the cause is fixed | [`queue.ts`](src/pipeline/queue.ts) |
+| Visibility | Metrics: attempts, retries, failures, short-circuits, dead-letters, p50/p95 latency | [`queue.ts`](src/pipeline/queue.ts) |
 
-*   **Frontend Ecosystem:** Engineered entirely in **TypeScript (99.1%)**, ensuring rigid static type safety, reliable payload interfaces, and programmatic contract compliance across all components.
-*   **Interface Styling (`/file.css`):** Built using an optimized custom stylesheet layout grid, maintaining full-viewport responsive scaling across both mobile web browsers and desktop platforms.
-*   **DevOps & Automation Pipeline (`/file.sh`):** Features native UNIX shell deployment routines to programmatically execute headless application testing, run production build configurations, and optimize file asset packages for hosting.
+## Reliability Lab (try it)
 
----
+The **Reliability** tab in the app is a fault-injection console. Turn on random 500s, rate limits,
+added latency, hanging calls or a full outage, upload a `.txt` manuscript in the Player view, and watch
+retries, the circuit breaker state, latency percentiles and the dead-letter list update live.
 
-## 🏗️ Repository Mapping
-├── .tsx Components       # Modular presentation and infrastructure logic layer
-│   ├── AccessDenied      # Intercepts restricted asset routes and displays conversion CTAs
-│   ├── ChapterList       # Orchestrates manuscript breakdowns and track hierarchies
-│   ├── ConversionProgress# Handles stateful polling interfaces for backend rendering pipelines
-│   ├── CreatorDashboard  # Central telemetry and data hub for account management
-│   ├── PayoutSettings    # Financial configuration panel for payout routing
-│   ├── Player            # Custom long-form audio media player engine
-│   ├── PremiumModal      # Commercial conversion asset handling payment triggers
-│   └── SubscriptionBanner# Persistent subscription lifecycle alerts and upgrade reminders
-├── file.css              # Main component stylesheets and layout frameworks
-├── file.json             # Core dependency management, metadata, and engine rulesets
-└── file.sh               # Shell utility scripting to execute continuous automated deployment
+## Tests
 
-## 🏁 Getting Started & Local Setup
+15 tests in [`tests/pipeline.test.ts`](tests/pipeline.test.ts), run in CI on every push:
 
-1. **Clone the project repository:**
-   ```bash
-   git clone https://github.com
-   cd ai-audiobook-generator
-   ```
+- retries recover from transient 5xx; permanent 4xx is not retried
+- a hung call is cut off by the timeout and retried
+- 429 waits at least `Retry-After`
+- jobs that keep failing are dead-lettered after `maxAttempts`, then succeed on requeue
+- the concurrency limit is never exceeded
+- circuit breaker opens, half-opens with exactly one trial call, closes on success, re-opens on a failed trial
+- **outage scenario:** provider down, then recovers; every chapter still completes, nothing is dead-lettered, and the breaker shed load during the outage
+- backoff growth, cap and jitter; chapter splitting
 
-2. **Install production package dependencies:**
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+npm test          # pipeline tests
+npm run dev       # http://localhost:5173
+npm run build
+```
 
-3. **Initialize the local staging development server:**
-   ```bash
-   npm run dev
-   ```
+## Project layout
+
+```
+src/
+  pipeline/         queue, retry policy, circuit breaker, timeouts, fake provider, chapter splitter
+  components/       UI (library, player, dashboard, Reliability Lab, paywall)
+  App.tsx           wires uploads into the pipeline
+tests/              pipeline tests
+```
+
+## Limits and next steps
+
+- **In-memory queue.** Jobs live in the browser tab; a refresh loses them. Production would move the queue server-side (e.g. a database-backed queue or SQS/Pub/Sub) with workers, so work survives restarts.
+- **Simulated provider.** Swapping in a real TTS API means implementing one `synthesize(text)` function; the retry/breaker logic doesn't change.
+- **Per-provider rate budgets.** Concurrency is a fixed number; a token bucket sized to the provider's quota would use capacity more precisely.
+- **Only `.txt`/`.md` are parsed.** Other formats fall back to placeholder chapters.
